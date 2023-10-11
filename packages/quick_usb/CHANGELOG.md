@@ -1,14 +1,3 @@
-## 0.4.0
-
-- Fix `requestPermission` compatibility below Android 11
-
-## 0.4.0-dev.0
-
-- Move to `quick.flutter` mono repo
-- Minimal constraints `flutter >= 2.5.0`
-- Fix Android 12 compatibility with FLAG_IMMUTABLE for permssion intent
-- Add "requestPermission" option to "getDevicesWithDescription"
-
 ## 0.3.1
 
 - Add `setAutoDetachKernelDriver`

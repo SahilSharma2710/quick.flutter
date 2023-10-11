@@ -5,14 +5,9 @@ import 'package:flutter/services.dart';
 import 'package:quick_usb/src/common.dart';
 import 'package:quick_usb/src/quick_usb_platform_interface.dart';
 
-const MethodChannel _channel = MethodChannel('quick_usb');
+const MethodChannel _channel = const MethodChannel('quick_usb');
 
 class QuickUsbAndroid extends QuickUsbPlatform {
-  // For example/.dart_tool/flutter_build/generated_main.dart
-  static registerWith() {
-    QuickUsbPlatform.instance = QuickUsbAndroid();
-  }
-
   @override
   Future<bool> init() async {
     return true;
@@ -25,40 +20,9 @@ class QuickUsbAndroid extends QuickUsbPlatform {
 
   @override
   Future<List<UsbDevice>> getDeviceList() async {
-    List<Map<dynamic, dynamic>> devices = (await _channel.invokeListMethod('getDeviceList'))!;
-    return devices.map((device) => UsbDevice.fromMap(device)).toList();
-  }
-
-  @override
-  Future<List<UsbDeviceDescription>> getDevicesWithDescription({
-    bool requestPermission = true,
-  }) async {
-    var devices = await getDeviceList();
-    var result = <UsbDeviceDescription>[];
-    for (var device in devices) {
-      result.add(await getDeviceDescription(
-        device,
-        requestPermission: requestPermission,
-      ));
-    }
-    return result;
-  }
-
-  @override
-  Future<UsbDeviceDescription> getDeviceDescription(
-    UsbDevice usbDevice, {
-    bool requestPermission = true,
-  }) async {
-    var result = await _channel.invokeMethod('getDeviceDescription', {
-      'device': usbDevice.toMap(),
-      'requestPermission': requestPermission,
-    });
-    return UsbDeviceDescription(
-      device: usbDevice,
-      manufacturer: result['manufacturer'],
-      product: result['product'],
-      serialNumber: result['serialNumber'],
-    );
+    List<Map<dynamic, dynamic>> list =
+        (await _channel.invokeListMethod('getDeviceList'))!;
+    return list.map((e) => UsbDevice.fromMap(e)).toList();
   }
 
   @override
@@ -67,8 +31,8 @@ class QuickUsbAndroid extends QuickUsbPlatform {
   }
 
   @override
-  Future<bool> requestPermission(UsbDevice usbDevice) async {
-    return await _channel.invokeMethod('requestPermission', usbDevice.toMap());
+  Future<void> requestPermission(UsbDevice usbDevice) {
+    return _channel.invokeMethod('requestPermission', usbDevice.toMap());
   }
 
   @override
@@ -134,6 +98,28 @@ class QuickUsbAndroid extends QuickUsbPlatform {
       'data': data,
       'timeout': timeout,
     });
+  }
+
+  @override
+  Future<UsbDeviceDescription> getDeviceDescription(UsbDevice usbDevice) async {
+    var result =
+        await _channel.invokeMethod('getDeviceDescription', usbDevice.toMap());
+    return UsbDeviceDescription(
+      device: usbDevice,
+      manufacturer: result['manufacturer'],
+      product: result['product'],
+      serialNumber: result['serialNumber'],
+    );
+  }
+
+  @override
+  Future<List<UsbDeviceDescription>> getDevicesWithDescription() async {
+    var devices = await getDeviceList();
+    var result = <UsbDeviceDescription>[];
+    for (var device in devices) {
+      result.add(await getDeviceDescription(device));
+    }
+    return result;
   }
 
   @override

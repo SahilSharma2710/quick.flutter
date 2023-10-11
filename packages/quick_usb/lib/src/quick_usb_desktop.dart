@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart' as ffi;
-import 'package:flutter/foundation.dart';
 import 'package:libusb/libusb64.dart';
 import 'package:quick_usb/src/common.dart';
 
@@ -13,26 +12,25 @@ import 'utils.dart';
 late Libusb _libusb;
 
 class QuickUsbWindows extends _QuickUsbDesktop {
-  // For example/.dart_tool/flutter_build/generated_main.dart
-  static registerWith() {
-    QuickUsbPlatform.instance = QuickUsbMacos();
+  QuickUsbWindows() {
     _libusb = Libusb(DynamicLibrary.open('libusb-1.0.23.dll'));
   }
 }
 
 class QuickUsbMacos extends _QuickUsbDesktop {
-  // For example/.dart_tool/flutter_build/generated_main.dart
-  static registerWith() {
-    QuickUsbPlatform.instance = QuickUsbMacos();
-    _libusb = Libusb(DynamicLibrary.open('libusb-1.0.23.dylib'));
+  QuickUsbMacos() {
+    if (Platform.version.contains('arm64')) {
+      _libusb = Libusb(DynamicLibrary.open('libusb-1.0.23.dylib'));
+    } else {
+      _libusb = Libusb(DynamicLibrary.open('libusb-1.0.0.dylib'));
+    }
   }
 }
 
 class QuickUsbLinux extends _QuickUsbDesktop {
-  // For example/.dart_tool/flutter_build/generated_main.dart
-  static registerWith() {
-    QuickUsbPlatform.instance = QuickUsbLinux();
-    _libusb = Libusb(DynamicLibrary.open('${File(Platform.resolvedExecutable).parent.path}/lib/libusb-1.0.23.so'));
+  QuickUsbLinux() {
+    _libusb = Libusb(DynamicLibrary.open(
+        '${File(Platform.resolvedExecutable).parent.path}/lib/libusb-1.0.23.so'));
   }
 }
 
@@ -89,79 +87,13 @@ class _QuickUsbDesktop extends QuickUsbPlatform {
   }
 
   @override
-  Future<List<UsbDeviceDescription>> getDevicesWithDescription({bool requestPermission = true}) async {
-    var devices = await getDeviceList();
-    var result = <UsbDeviceDescription>[];
-    for (var device in devices) {
-      result.add(await getDeviceDescription(device));
-    }
-    return result;
-  }
-
-  @override
-  Future<UsbDeviceDescription> getDeviceDescription(UsbDevice usbDevice, {bool requestPermission = true}) async {
-    String? manufacturer;
-    String? product;
-    String? serialNumber;
-    var descPtr = ffi.calloc<libusb_device_descriptor>();
-    try {
-      var handle = _libusb.libusb_open_device_with_vid_pid(
-          nullptr, usbDevice.vendorId, usbDevice.productId);
-      if (handle != nullptr) {
-        var device = _libusb.libusb_get_device(handle);
-        if (device != nullptr) {
-          var getDesc = _libusb.libusb_get_device_descriptor(device, descPtr) ==
-              libusb_error.LIBUSB_SUCCESS;
-          if (getDesc) {
-            if (descPtr.ref.iManufacturer > 0) {
-              manufacturer =
-                  _getStringDescriptorASCII(handle, descPtr.ref.iManufacturer);
-            }
-            if (descPtr.ref.iProduct > 0) {
-              product = _getStringDescriptorASCII(handle, descPtr.ref.iProduct);
-            }
-            if (descPtr.ref.iSerialNumber > 0) {
-              serialNumber =
-                  _getStringDescriptorASCII(handle, descPtr.ref.iSerialNumber);
-            }
-          }
-        }
-        _libusb.libusb_close(handle);
-      }
-    } finally {
-      ffi.calloc.free(descPtr);
-    }
-    return UsbDeviceDescription(
-        device: usbDevice,
-        manufacturer: manufacturer,
-        product: product,
-        serialNumber: serialNumber);
-  }
-
-  String? _getStringDescriptorASCII(
-      Pointer<libusb_device_handle> handle, int descIndex) {
-    String? result;
-    Pointer<ffi.Utf8> string = ffi.calloc<Uint8>(256).cast();
-    try {
-      var ret = _libusb.libusb_get_string_descriptor_ascii(
-          handle, descIndex, string.cast(), 256);
-      if (ret > 0) {
-        result = string.toDartString();
-      }
-    } finally {
-      ffi.calloc.free(string);
-    }
-    return result;
-  }
-
-  @override
   Future<bool> hasPermission(UsbDevice usbDevice) async {
     return true;
   }
 
   @override
-  Future<bool> requestPermission(UsbDevice usbDevice) async {
-    return true;
+  Future<void> requestPermission(UsbDevice usbDevice) async {
+    return;
   }
 
   @override
@@ -248,7 +180,7 @@ class _QuickUsbDesktop extends QuickUsbPlatform {
 
     var setConfig = _libusb.libusb_set_configuration(_devHandle!, config.id);
     if (setConfig != libusb_error.LIBUSB_SUCCESS) {
-      debugPrint('setConfig error: ${_libusb.describeError(setConfig)}');
+      print('setConfig error: ${_libusb.describeError(setConfig)}');
       return false;
     }
     return true;
@@ -328,7 +260,7 @@ class _QuickUsbDesktop extends QuickUsbPlatform {
       );
 
       if (result != libusb_error.LIBUSB_SUCCESS) {
-        debugPrint('bulkTransferOut error: ${_libusb.describeError(result)}');
+        print('bulkTransferOut error: ${_libusb.describeError(result)}');
         return -1;
       }
       return actualLengthPtr.value;
@@ -336,6 +268,72 @@ class _QuickUsbDesktop extends QuickUsbPlatform {
       ffi.calloc.free(actualLengthPtr);
       ffi.calloc.free(dataPtr);
     }
+  }
+
+  @override
+  Future<UsbDeviceDescription> getDeviceDescription(UsbDevice usbDevice) async {
+    String? manufacturer;
+    String? product;
+    String? serialNumber;
+    var descPtr = ffi.calloc<libusb_device_descriptor>();
+    try {
+      var handle = _libusb.libusb_open_device_with_vid_pid(
+          nullptr, usbDevice.vendorId, usbDevice.productId);
+      if (handle != nullptr) {
+        var device = _libusb.libusb_get_device(handle);
+        if (device != nullptr) {
+          var getDesc = _libusb.libusb_get_device_descriptor(device, descPtr) ==
+              libusb_error.LIBUSB_SUCCESS;
+          if (getDesc) {
+            if (descPtr.ref.iManufacturer > 0) {
+              manufacturer =
+                  _getStringDescriptorASCII(handle, descPtr.ref.iManufacturer);
+            }
+            if (descPtr.ref.iProduct > 0) {
+              product = _getStringDescriptorASCII(handle, descPtr.ref.iProduct);
+            }
+            if (descPtr.ref.iSerialNumber > 0) {
+              serialNumber =
+                  _getStringDescriptorASCII(handle, descPtr.ref.iSerialNumber);
+            }
+          }
+        }
+        _libusb.libusb_close(handle);
+      }
+    } finally {
+      ffi.calloc.free(descPtr);
+    }
+    return UsbDeviceDescription(
+        device: usbDevice,
+        manufacturer: manufacturer,
+        product: product,
+        serialNumber: serialNumber);
+  }
+
+  String? _getStringDescriptorASCII(
+      Pointer<libusb_device_handle> handle, int descIndex) {
+    String? result;
+    Pointer<ffi.Utf8> string = ffi.calloc<Uint8>(256).cast();
+    try {
+      var ret = _libusb.libusb_get_string_descriptor_ascii(
+          handle, descIndex, string.cast(), 256);
+      if (ret > 0) {
+        result = string.toDartString();
+      }
+    } finally {
+      ffi.calloc.free(string);
+    }
+    return result;
+  }
+
+  @override
+  Future<List<UsbDeviceDescription>> getDevicesWithDescription() async {
+    var devices = await getDeviceList();
+    var result = <UsbDeviceDescription>[];
+    for (var device in devices) {
+      result.add(await getDeviceDescription(device));
+    }
+    return result;
   }
 
   @override
